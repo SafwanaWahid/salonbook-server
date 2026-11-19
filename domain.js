@@ -20,6 +20,12 @@ function parseImageDataUrl(value, maxBytes = 6 * 1024 * 1024) {
   return { mimeType: `image/${match[1].toLowerCase()}`, base64: match[2], bytes: bytes.length };
 }
 
+function isValidBookingDate(value, today = new Date().toISOString().slice(0, 10)) {
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const parsed = new Date(`${value}T00:00:00.000Z`);
+  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value && value >= today;
+}
+
 function verifyStripeSignature(payload, signatureHeader, secret, now = Date.now()) {
   if (!Buffer.isBuffer(payload) || !signatureHeader || !secret) return false;
   const entries = String(signatureHeader).split(",").map((entry) => entry.split("="));
@@ -30,4 +36,4 @@ function verifyStripeSignature(payload, signatureHeader, secret, now = Date.now(
   return signatures.some((signature) => /^[a-f0-9]{64}$/i.test(signature) && crypto.timingSafeEqual(Buffer.from(signature, "hex"), Buffer.from(expected, "hex")));
 }
 
-export { isSecureImageUrl, parseImageDataUrl, passwordValid, serviceCategories, verifyStripeSignature };
+export { isSecureImageUrl, isValidBookingDate, parseImageDataUrl, passwordValid, serviceCategories, verifyStripeSignature };

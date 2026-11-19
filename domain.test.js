@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createHmac } from "node:crypto";
-import { isSecureImageUrl, parseImageDataUrl, passwordValid, verifyStripeSignature } from "./domain.js";
+import { isSecureImageUrl, isValidBookingDate, parseImageDataUrl, passwordValid, verifyStripeSignature } from "./domain.js";
 
 test("signup passwords need length, uppercase, and lowercase", () => {
   assert.equal(passwordValid("SalonPass1"), true);
@@ -22,6 +22,14 @@ test("image uploads accept only supported, valid, size-limited data URLs", () =>
   assert.equal(parseImageDataUrl("data:image/svg+xml;base64,PHN2Zz4="), null);
   assert.equal(parseImageDataUrl("data:image/png;base64,not-base64!"), null);
   assert.equal(parseImageDataUrl("data:image/png;base64,aGVsbG8=", 4), null);
+});
+
+test("booking dates must be real ISO dates today or later", () => {
+  assert.equal(isValidBookingDate("2026-11-20", "2026-11-19"), true);
+  assert.equal(isValidBookingDate("2026-11-19", "2026-11-19"), true);
+  assert.equal(isValidBookingDate("2026-11-18", "2026-11-19"), false);
+  assert.equal(isValidBookingDate("2026-02-30", "2026-01-01"), false);
+  assert.equal(isValidBookingDate("19-11-2026", "2026-01-01"), false);
 });
 
 test("Stripe signatures must match the timestamp and payload", () => {

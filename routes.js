@@ -1,7 +1,7 @@
 import { ObjectId } from "mongodb";
 import { db } from "./db.js";
 import { requireJwt, requireRole } from "./security.js";
-import { isSecureImageUrl, parseImageDataUrl, serviceCategories, verifyStripeSignature } from "./domain.js";
+import { isSecureImageUrl, isValidBookingDate, parseImageDataUrl, serviceCategories, verifyStripeSignature } from "./domain.js";
 
 const api = (app) => {
   const services = db.collection("services");
@@ -79,8 +79,7 @@ const api = (app) => {
     try {
       const date = String(req.query.date || "");
       const serviceFilter = idFilter(String(req.query.serviceId || ""));
-      const requestedDate = new Date(`${date}T00:00:00.000Z`);
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || Number.isNaN(requestedDate.getTime()) || requestedDate.toISOString().slice(0, 10) !== date || !serviceFilter || requestedDate < new Date(new Date().toISOString().slice(0, 10))) return res.status(400).json({ message: "Choose a valid service and future date." });
+      if (!isValidBookingDate(date) || !serviceFilter) return res.status(400).json({ message: "Choose a valid service and future date." });
       const service = await services.findOne({ ...serviceFilter, status: "active" });
       if (!service) return res.status(404).json({ message: "This service is unavailable." });
       const booked = await appointments.find({ appointmentDate: date, status: { $in: activeStatuses } }, { projection: { timeSlot: 1 } }).toArray();
@@ -93,8 +92,7 @@ const api = (app) => {
     try {
       const { serviceId, appointmentDate, timeSlot, message = "" } = req.body;
       const serviceFilter = idFilter(serviceId);
-      const date = new Date(`${appointmentDate}T00:00:00.000Z`);
-      if (!serviceFilter || Number.isNaN(date.getTime()) || date < new Date(new Date().toISOString().slice(0, 10)) || !timeSlots.includes(timeSlot)) return res.status(400).json({ message: "Choose a valid future date and available time slot." });
+      if (!serviceFilter || !isValidBookingDate(appointmentDate) || !timeSlots.includes(timeSlot)) return res.status(400).json({ message: "Choose a valid future date and available time slot." });
       const service = await services.findOne({ ...serviceFilter, status: "active" });
       if (!service) return res.status(400).json({ message: "This service is not available for booking." });
       const collision = await appointments.findOne({ appointmentDate, timeSlot, status: { $in: activeStatuses } });

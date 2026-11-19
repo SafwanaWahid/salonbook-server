@@ -9,6 +9,7 @@ const api = (app) => {
   const users = db.collection("user");
   const transactions = db.collection("transactions");
   const activeStatuses = ["pending", "confirmed"];
+  const timeSlots = ["10:00 AM", "11:30 AM", "01:00 PM", "02:30 PM", "04:00 PM", "05:30 PM", "07:00 PM"];
   const idFilter = (id) => ObjectId.isValid(id) ? { _id: new ObjectId(id) } : null;
   const serialize = (doc) => ({ ...doc, _id: String(doc._id) });
 
@@ -74,13 +75,26 @@ const api = (app) => {
     } catch (error) { next(error); }
   });
 
+  app.get("/api/availability", async (req, res, next) => {
+    try {
+      const date = String(req.query.date || "");
+      const serviceFilter = idFilter(String(req.query.serviceId || ""));
+      const requestedDate = new Date(`${date}T00:00:00.000Z`);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || Number.isNaN(requestedDate.getTime()) || requestedDate.toISOString().slice(0, 10) !== date || !serviceFilter || requestedDate < new Date(new Date().toISOString().slice(0, 10))) return res.status(400).json({ message: "Choose a valid service and future date." });
+      const service = await services.findOne({ ...serviceFilter, status: "active" });
+      if (!service) return res.status(404).json({ message: "This service is unavailable." });
+      const booked = await appointments.find({ appointmentDate: date, status: { $in: activeStatuses } }, { projection: { timeSlot: 1 } }).toArray();
+      const unavailable = new Set(booked.map((item) => item.timeSlot));
+      res.json({ timeSlots: timeSlots.filter((slot) => !unavailable.has(slot)) });
+    } catch (error) { next(error); }
+  });
+
   app.post("/api/appointments", requireJwt, requireRole("customer"), async (req, res, next) => {
     try {
       const { serviceId, appointmentDate, timeSlot, message = "" } = req.body;
       const serviceFilter = idFilter(serviceId);
       const date = new Date(`${appointmentDate}T00:00:00.000Z`);
-      const slots = ["10:00 AM", "11:30 AM", "01:00 PM", "02:30 PM", "04:00 PM", "05:30 PM", "07:00 PM"];
-      if (!serviceFilter || Number.isNaN(date.getTime()) || date < new Date(new Date().toISOString().slice(0, 10)) || !slots.includes(timeSlot)) return res.status(400).json({ message: "Choose a valid future date and available time slot." });
+      if (!serviceFilter || Number.isNaN(date.getTime()) || date < new Date(new Date().toISOString().slice(0, 10)) || !timeSlots.includes(timeSlot)) return res.status(400).json({ message: "Choose a valid future date and available time slot." });
       const service = await services.findOne({ ...serviceFilter, status: "active" });
       if (!service) return res.status(400).json({ message: "This service is not available for booking." });
       const collision = await appointments.findOne({ appointmentDate, timeSlot, status: { $in: activeStatuses } });

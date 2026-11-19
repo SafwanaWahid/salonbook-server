@@ -219,9 +219,10 @@ const api = (app) => {
   });
   app.patch("/api/admin/users/:id/block", requireJwt, requireRole("admin"), async (req, res, next) => {
     try {
+      if (typeof req.body?.isBlocked !== "boolean") return res.status(400).json({ message: "isBlocked must be true or false." });
       const filter = idFilter(req.params.id);
       if (!filter) return res.status(404).json({ message: "User not found." });
-      const isBlocked = Boolean(req.body.isBlocked);
+      const { isBlocked } = req.body;
       const result = await users.updateOne({ ...filter, role: { $ne: "admin" } }, { $set: { isBlocked } });
       if (!result.matchedCount) return res.status(404).json({ message: "Customer not found." });
       res.json({ success: true, isBlocked });

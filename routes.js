@@ -1,7 +1,7 @@
-import crypto from "node:crypto";
 import { ObjectId } from "mongodb";
 import { db } from "./db.js";
 import { requireJwt, requireRole } from "./security.js";
+import { isSecureImageUrl, serviceCategories, verifyStripeSignature } from "./domain.js";
 
 const api = (app) => {
   const services = db.collection("services");
@@ -9,10 +9,8 @@ const api = (app) => {
   const users = db.collection("user");
   const transactions = db.collection("transactions");
   const activeStatuses = ["pending", "confirmed"];
-  const serviceCategories = ["Haircut & Styling", "Hair Coloring", "Hair Treatment", "Facial & Skincare", "Makeup", "Manicure & Pedicure", "Spa & Massage"];
   const idFilter = (id) => ObjectId.isValid(id) ? { _id: new ObjectId(id) } : null;
   const serialize = (doc) => ({ ...doc, _id: String(doc._id) });
-  const isHttpsUrl = (value) => { try { return new URL(value).protocol === "https:"; } catch { return false; } };
 
   app.get("/api/services", async (req, res, next) => {
     try {
@@ -40,7 +38,7 @@ const api = (app) => {
     try {
       const { serviceName, category, description, price, duration, image } = req.body;
       const status = req.body.status || "active";
-      if (!serviceName?.trim() || !serviceCategories.includes(category) || !description?.trim() || !(Number(price) > 0) || !(Number(duration) > 0) || !isHttpsUrl(image) || !["active", "inactive"].includes(status)) return res.status(400).json({ message: "Complete all service fields with a secure image URL, valid category, positive price, duration, and status." });
+      if (!serviceName?.trim() || !serviceCategories.includes(category) || !description?.trim() || !(Number(price) > 0) || !(Number(duration) > 0) || !isSecureImageUrl(image) || !["active", "inactive"].includes(status)) return res.status(400).json({ message: "Complete all service fields with a secure image URL, valid category, positive price, duration, and status." });
       const doc = { serviceName: serviceName.trim(), category, description: description.trim(), price: Number(price), duration: Number(duration), image, status, createdAt: new Date() };
       const result = await services.insertOne(doc);
       res.status(201).json({ service: serialize({ ...doc, _id: result.insertedId }) });
@@ -58,7 +56,7 @@ const api = (app) => {
       if ("price" in update) update.price = Number(update.price);
       if ("duration" in update) update.duration = Number(update.duration);
       if (update.category && !serviceCategories.includes(update.category)) return res.status(400).json({ message: "Choose a valid service category." });
-      if (update.image && !isHttpsUrl(update.image)) return res.status(400).json({ message: "Service images must use a secure HTTPS URL." });
+      if (update.image && !isSecureImageUrl(update.image)) return res.status(400).json({ message: "Service images must use a secure HTTPS URL." });
       if (update.price !== undefined && !(update.price > 0) || update.duration !== undefined && !(update.duration > 0)) return res.status(400).json({ message: "Price and duration must be positive." });
       if (update.status && !["active", "inactive"].includes(update.status)) return res.status(400).json({ message: "Choose a valid service status." });
       const result = await services.findOneAndUpdate(filter, { $set: update }, { returnDocument: "after" });
@@ -215,7 +213,7 @@ const api = (app) => {
       const { name, image, phone } = req.body;
       const update = {};
       if (typeof name === "string" && name.trim()) update.name = name.trim().slice(0, 100);
-      if (typeof image === "string" && image && !isHttpsUrl(image)) return res.status(400).json({ message: "Profile images must use a secure HTTPS URL." });
+      if (typeof image === "string" && image && !isSecureImageUrl(image)) return res.status(400).json({ message: "Profile images must use a secure HTTPS URL." });
       if (typeof image === "string") update.image = image.slice(0, 2000);
       if (typeof phone === "string") update.phone = phone.trim().slice(0, 40);
       const result = await users.updateOne({ _id: new ObjectId(req.user.id) }, { $set: update });
@@ -239,12 +237,7 @@ const api = (app) => {
   app.post("/api/webhooks/stripe", async (req, res) => {
     const secret = process.env.STRIPE_WEBHOOK_SECRET;
     if (!secret) return res.status(503).send("Webhook not configured");
-    const signature = req.headers["stripe-signature"];
-    const parts = Object.fromEntries(String(signature || "").split(",").map((item) => item.split("=")));
-    const signedPayload = `${parts.t}.${req.body.toString("utf8")}`;
-    const expected = crypto.createHmac("sha256", secret).update(signedPayload).digest("hex");
-    const candidates = String(signature || "").split(",").filter((part) => part.startsWith("v1=")).map((part) => part.slice(3));
-    if (!parts.t || Math.abs(Date.now() / 1000 - Number(parts.t)) > 300 || !candidates.some((candidate) => candidate.length === expected.length && crypto.timingSafeEqual(Buffer.from(candidate), Buffer.from(expected)))) return res.status(400).send("Invalid signature");
+    if (!verifyStripeSignature(req.body, req.headers["stripe-signature"], secret)) return res.status(400).send("Invalid signature");
     try {
       const event = JSON.parse(req.body.toString("utf8"));
       if (event.type === "checkout.session.completed" && event.data.object.payment_status === "paid") {

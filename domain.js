@@ -1,0 +1,24 @@
+import crypto from "node:crypto";
+
+const serviceCategories = ["Haircut & Styling", "Hair Coloring", "Hair Treatment", "Facial & Skincare", "Makeup", "Manicure & Pedicure", "Spa & Massage"];
+
+function passwordValid(password) {
+  return typeof password === "string" && password.length >= 6 && password.length <= 128 && /[A-Z]/.test(password) && /[a-z]/.test(password);
+}
+
+function isSecureImageUrl(value) {
+  try { return new URL(value).protocol === "https:"; }
+  catch { return false; }
+}
+
+function verifyStripeSignature(payload, signatureHeader, secret, now = Date.now()) {
+  if (!Buffer.isBuffer(payload) || !signatureHeader || !secret) return false;
+  const entries = String(signatureHeader).split(",").map((entry) => entry.split("="));
+  const timestamp = entries.find(([key]) => key === "t")?.[1];
+  const signatures = entries.filter(([key]) => key === "v1").map(([, value]) => value);
+  if (!timestamp || Math.abs(now / 1000 - Number(timestamp)) > 300) return false;
+  const expected = crypto.createHmac("sha256", secret).update(`${timestamp}.${payload.toString("utf8")}`).digest("hex");
+  return signatures.some((signature) => /^[a-f0-9]{64}$/i.test(signature) && crypto.timingSafeEqual(Buffer.from(signature, "hex"), Buffer.from(expected, "hex")));
+}
+
+export { isSecureImageUrl, passwordValid, serviceCategories, verifyStripeSignature };

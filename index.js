@@ -9,6 +9,7 @@ import { clientOrigin } from "./config.js";
 import { db } from "./db.js";
 import { api } from "./routes.js";
 import { issueAccessToken, requireJwt } from "./security.js";
+import { passwordValid } from "./domain.js";
 
 const app = express();
 app.disable("x-powered-by");
@@ -21,8 +22,7 @@ app.post("/api/webhooks/stripe", express.raw({ type: "application/json", limit: 
 app.use(express.json({ limit: "10mb" }));
 app.get("/api/health", (req, res) => res.json({ status: "healthy", app: "SalonBook" }));
 app.post("/api/auth/sign-up/email", async (req, res, next) => {
-  const password = String(req.body?.password || "");
-  if (password.length < 6 || password.length > 128 || !/[A-Z]/.test(password) || !/[a-z]/.test(password)) return res.status(400).json({ message: "Use at least 6 characters with one uppercase and one lowercase letter." });
+  if (!passwordValid(req.body?.password)) return res.status(400).json({ message: "Use at least 6 characters with one uppercase and one lowercase letter." });
   try {
     const headers = fromNodeHeaders(req.headers);
     headers.set("content-type", "application/json");

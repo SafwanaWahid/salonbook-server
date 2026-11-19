@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "type": "module",
   "private": true,
-  "scripts": { "dev": "node --watch index.js", "start": "node index.js", "seed": "node seed.js" },
+  "scripts": { "dev": "node --watch index.js", "start": "node index.js", "seed": "node seed.js", "test": "node --test" },
   "dependencies": {
     "@better-auth/mongo-adapter": "1.7.14",
     "better-auth": "1.7.14",

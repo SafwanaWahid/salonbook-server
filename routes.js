@@ -259,7 +259,7 @@ const api = (app) => {
     if (!verifyStripeSignature(req.body, req.headers["stripe-signature"], secret)) return res.status(400).send("Invalid signature");
     try {
       const event = JSON.parse(req.body.toString("utf8"));
-      if (event.type === "checkout.session.completed" && event.data.object.payment_status === "paid") {
+      if (["checkout.session.completed", "checkout.session.async_payment_succeeded"].includes(event.type) && event.data.object.payment_status === "paid") {
         const checkout = event.data.object;
         const appointmentId = ObjectId.isValid(checkout.metadata?.appointmentId) ? new ObjectId(checkout.metadata.appointmentId) : null;
         const customerId = ObjectId.isValid(checkout.metadata?.customerId) ? new ObjectId(checkout.metadata.customerId) : null;

@@ -157,6 +157,13 @@ const api = (app) => {
       if (!filter) return res.status(404).json({ message: "Appointment not found." });
       const appointment = await appointments.findOne({ ...filter, customerId: new ObjectId(req.user.id), status: "confirmed", paymentStatus: "unpaid" });
       if (!appointment) return res.status(409).json({ message: "Only confirmed, unpaid appointments can be paid." });
+      if (appointment.stripeSessionId) {
+        const existingResponse = await fetch(`https://api.stripe.com/v1/checkout/sessions/${encodeURIComponent(appointment.stripeSessionId)}`, { headers: { Authorization: `Bearer ${process.env.STRIPE_SECRET_KEY}` } });
+        if (existingResponse.ok) {
+          const existingSession = await existingResponse.json();
+          if (existingSession.status === "open" && existingSession.url) return res.json({ checkoutUrl: existingSession.url });
+        }
+      }
       const service = await services.findOne({ _id: appointment.serviceId });
       const body = new URLSearchParams({
         mode: "payment", success_url: `${process.env.CLIENT_URL}/payment/success?session_id={CHECKOUT_SESSION_ID}`,

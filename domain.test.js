@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createHmac } from "node:crypto";
-import { isSecureImageUrl, passwordValid, verifyStripeSignature } from "./domain.js";
+import { isSecureImageUrl, parseImageDataUrl, passwordValid, verifyStripeSignature } from "./domain.js";
 
 test("signup passwords need length, uppercase, and lowercase", () => {
   assert.equal(passwordValid("SalonPass1"), true);
@@ -15,6 +15,13 @@ test("service and profile images must use HTTPS", () => {
   assert.equal(isSecureImageUrl("https://i.ibb.co/image.jpg"), true);
   assert.equal(isSecureImageUrl("http://example.com/image.jpg"), false);
   assert.equal(isSecureImageUrl("not a URL"), false);
+});
+
+test("image uploads accept only supported, valid, size-limited data URLs", () => {
+  assert.deepEqual(parseImageDataUrl("data:image/png;base64,aGVsbG8="), { mimeType: "image/png", base64: "aGVsbG8=", bytes: 5 });
+  assert.equal(parseImageDataUrl("data:image/svg+xml;base64,PHN2Zz4="), null);
+  assert.equal(parseImageDataUrl("data:image/png;base64,not-base64!"), null);
+  assert.equal(parseImageDataUrl("data:image/png;base64,aGVsbG8=", 4), null);
 });
 
 test("Stripe signatures must match the timestamp and payload", () => {

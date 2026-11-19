@@ -1,7 +1,7 @@
 import { ObjectId } from "mongodb";
 import { db } from "./db.js";
 import { requireJwt, requireRole } from "./security.js";
-import { isSecureImageUrl, serviceCategories, verifyStripeSignature } from "./domain.js";
+import { isSecureImageUrl, parseImageDataUrl, serviceCategories, verifyStripeSignature } from "./domain.js";
 
 const api = (app) => {
   const services = db.collection("services");
@@ -244,10 +244,10 @@ const api = (app) => {
   });
   app.post("/api/uploads", requireJwt, async (req, res) => {
     if (!process.env.IMGBB_API_KEY) return res.status(503).json({ message: "Image uploads are not configured yet." });
-    const image = String(req.body?.image || "").replace(/^data:image\/[a-zA-Z0-9.+-]+;base64,/, "");
-    if (!image || image.length > 8_000_000) return res.status(400).json({ message: "Choose an image under 6 MB." });
+    const parsedImage = parseImageDataUrl(req.body?.image);
+    if (!parsedImage) return res.status(400).json({ message: "Upload a PNG, JPEG, WebP, or GIF image under 6 MB." });
     try {
-      const body = new URLSearchParams({ image });
+      const body = new URLSearchParams({ image: parsedImage.base64 });
       const response = await fetch(`https://api.imgbb.com/1/upload?key=${encodeURIComponent(process.env.IMGBB_API_KEY)}`, { method: "POST", body });
       const data = await response.json();
       if (!response.ok || !data.success) return res.status(502).json({ message: "Image upload failed." });

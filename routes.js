@@ -259,10 +259,13 @@ const api = (app) => {
         const appointmentId = ObjectId.isValid(checkout.metadata?.appointmentId) ? new ObjectId(checkout.metadata.appointmentId) : null;
         const customerId = ObjectId.isValid(checkout.metadata?.customerId) ? new ObjectId(checkout.metadata.customerId) : null;
         if (!appointmentId || !customerId) return res.status(400).send("Missing payment metadata");
-        const appointment = await appointments.findOne({ _id: appointmentId, customerId, status: "confirmed", paymentStatus: "unpaid", stripeSessionId: checkout.id });
+        const appointment = await appointments.findOne({ _id: appointmentId, customerId, status: "confirmed", stripeSessionId: checkout.id });
         if (appointment) {
-          await appointments.updateOne({ _id: appointment._id, paymentStatus: "unpaid" }, { $set: { paymentStatus: "paid" } });
-          await transactions.updateOne({ stripeSessionId: checkout.id }, { $setOnInsert: { appointmentId: appointment._id, customerId, amount: Number(checkout.amount_total) / 100, currency: checkout.currency, stripeSessionId: checkout.id, status: "paid", createdAt: new Date() } }, { upsert: true });
+          await transactions.updateOne({ stripeSessionId: checkout.id }, {
+            $set: { appointmentId: appointment._id, customerId, amount: Number(checkout.amount_total) / 100, currency: checkout.currency, status: "paid" },
+            $setOnInsert: { stripeSessionId: checkout.id, createdAt: new Date() },
+          }, { upsert: true });
+          await appointments.updateOne({ _id: appointment._id, paymentStatus: { $ne: "paid" } }, { $set: { paymentStatus: "paid" } });
         }
       }
       if (event.type === "checkout.session.expired" || event.type === "checkout.session.async_payment_failed") {
